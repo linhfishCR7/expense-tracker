@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Track your daily expenses, manage budgets, and visualize spending patterns with interactive charts. Take control of your finances!">
+    <meta name="keywords" content="expense tracker, budget, finance, money management, spending tracker">
+    <title>Personal Expense Tracker</title>
+    <link rel="stylesheet" href="css/style.css">
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#764ba2">
+    <link rel="apple-touch-icon" href="img/logo.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>💰 Personal Expense Tracker</h1>
+            <div class="balance-display">
+                <div class="balance-item">
+                    <span class="label">Total Budget:</span>
+                    <span id="totalBudget" class="amount">$0.00</span>
+                </div>
+                <div class="balance-item">
+                    <span class="label">Total Spent:</span>
+                    <span id="totalSpent" class="amount spent">$0.00</span>
+                </div>
+                <div class="balance-item">
+                    <span class="label">Remaining:</span>
+                    <span id="remaining" class="amount">$0.00</span>
+                </div>
+            </div>
+        </header>
+
+        <main>
+            <div class="input-section">
+                <h2>Add New Expense</h2>
+                <form id="expenseForm">
+                    <div class="form-group">
+                        <label for="description">Description:</label>
+                        <input type="text" id="description" required placeholder="Enter expense description">
+                    </div>
+                    <div class="form-group">
+                        <label for="amount">Amount:</label>
+                        <input type="number" id="amount" step="0.01" required placeholder="0.00">
+                    </div>
+                    <div class="form-group">
+                        <label for="category">Category:</label>
+                        <select id="category" required>
+                            <option value="">Select Category</option>
+                            <option value="food">🍔 Food & Dining</option>
+                            <option value="transport">🚗 Transportation</option>
+                            <option value="shopping">🛍️ Shopping</option>
+                            <option value="entertainment">🎬 Entertainment</option>
+                            <option value="bills">💡 Bills & Utilities</option>
+                            <option value="health">🏥 Health & Medical</option>
+                            <option value="education">📚 Education</option>
+                            <option value="other">📦 Other</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label for="date">Date:</label>
+                        <input type="date" id="date" required>
+                    </div>
+                    <button type="submit" class="btn-primary">Add Expense</button>
+                </form>
+            </div>
+
+            <div class="budget-section">
+                <h2>Budget Management</h2>
+                <div class="budget-form">
+                    <input type="number" id="budgetAmount" step="0.01" placeholder="Set monthly budget">
+                    <button id="setBudgetBtn" class="btn-secondary">Set Budget</button>
+                </div>
+                <div class="budget-alerts" id="budgetAlerts"></div>
+            </div>
+
+            <div class="charts-section">
+                <h2>Spending Overview</h2>
+                <div class="chart-container">
+                    <canvas id="categoryChart" width="400" height="400"></canvas>
+                </div>
+                <div class="chart-container">
+                    <canvas id="monthlyChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+
+            <div class="expenses-section">
+                <h2>Recent Expenses</h2>
+                <div class="filter-controls">
+                    <select id="filterCategory">
+                        <option value="">All Categories</option>
+                        <option value="food">🍔 Food & Dining</option>
+                        <option value="transport">🚗 Transportation</option>
+                        <option value="shopping">🛍️ Shopping</option>
+                        <option value="entertainment">🎬 Entertainment</option>
+                        <option value="bills">💡 Bills & Utilities</option>
+                        <option value="health">🏥 Health & Medical</option>
+                        <option value="education">📚 Education</option>
+                        <option value="other">📦 Other</option>
+                    </select>
+                    <button id="clearAllBtn" class="btn-danger">Clear All Expenses</button>
+                </div>
+                <div id="expensesList" class="expenses-list"></div>
+            </div>
+        </main>
+    </div>
+
+    <script src="js/script.js"></script>
+</body>
+</html>
