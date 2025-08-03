@@ -48,15 +48,27 @@
 </head>
 <body>
     <div class="test-container">
-        <h1>🔥 Firestore Connection Test</h1>
-        <p>This page tests the Firebase Firestore connection and cross-device sync functionality.</p>
+        <h1>🔥 Firestore Database Setup & Diagnostic Tool</h1>
+        <p>This tool helps diagnose and fix Firestore database setup issues for cross-device sync.</p>
+
+        <div class="test-result info">
+            <strong>Project ID:</strong> expense-tracker-12072<br>
+            <strong>Purpose:</strong> Verify Firestore database exists and is properly configured
+        </div>
 
         <div id="results"></div>
 
-        <button onclick="testFirebaseConnection()">Test Firebase Connection</button>
-        <button onclick="testFirestoreWrite()">Test Firestore Write</button>
-        <button onclick="testFirestoreRead()">Test Firestore Read</button>
-        <button onclick="testRealtimeListener()">Test Real-time Listener</button>
+        <h3>🔍 Diagnostic Tests</h3>
+        <button onclick="testFirebaseConnection()">1. Test Firebase Connection</button>
+        <button onclick="testAuthentication()">2. Test Authentication</button>
+        <button onclick="testFirestoreAccess()">3. Test Firestore Access</button>
+        <button onclick="testSecurityRules()">4. Test Security Rules</button>
+        <button onclick="testDataStructure()">5. Test Data Structure</button>
+        <button onclick="testRealtimeSync()">6. Test Real-time Sync</button>
+
+        <h3>🛠️ Setup Actions</h3>
+        <button onclick="createSampleData()">Create Sample Data</button>
+        <button onclick="testCrossDeviceSync()">Test Cross-Device Sync</button>
         <button onclick="clearResults()">Clear Results</button>
 
         <h3>Debug Console</h3>
@@ -115,130 +127,453 @@
         };
 
         async function testFirebaseConnection() {
-            addResult('info', 'Testing Firebase connection...');
-            
+            addResult('info', '🔍 Testing Firebase connection...');
+
             try {
                 if (typeof firebase === 'undefined') {
-                    addResult('error', 'Firebase SDK not loaded');
-                    return;
+                    addResult('error', '❌ Firebase SDK not loaded - Check if Firebase scripts are included');
+                    return false;
                 }
 
                 if (!window.firebaseConfigured) {
-                    addResult('error', 'Firebase not configured');
-                    return;
+                    addResult('error', '❌ Firebase not configured - Check firebase-config.js');
+                    return false;
                 }
 
                 if (!window.firebaseDb) {
-                    addResult('error', 'Firestore not initialized');
-                    return;
+                    addResult('error', '❌ Firestore not initialized - Database may not exist');
+                    return false;
                 }
 
-                addResult('success', 'Firebase and Firestore are properly initialized');
-                
-                // Test authentication state
+                addResult('success', '✅ Firebase and Firestore are properly initialized');
+                addResult('info', `📋 Project ID: ${firebase.app().options.projectId}`);
+                addResult('info', `🌐 Auth Domain: ${firebase.app().options.authDomain}`);
+
+                return true;
+
+            } catch (error) {
+                addResult('error', `❌ Firebase connection error: ${error.message}`);
+                return false;
+            }
+        }
+
+        async function testAuthentication() {
+            addResult('info', '🔍 Testing authentication...');
+
+            try {
                 const user = firebase.auth().currentUser;
                 if (user) {
-                    addResult('success', `User authenticated: ${user.displayName} (${user.email})`);
+                    addResult('success', `✅ User authenticated: ${user.displayName} (${user.email})`);
+                    addResult('info', `👤 User ID: ${user.uid}`);
+                    return user;
                 } else {
-                    addResult('info', 'No user currently authenticated');
-                }
+                    addResult('error', '❌ No user authenticated - Please sign in with Google first');
 
+                    // Attempt to sign in
+                    addResult('info', '🔄 Attempting Google sign-in...');
+                    const provider = new firebase.auth.GoogleAuthProvider();
+                    const result = await firebase.auth().signInWithPopup(provider);
+
+                    if (result.user) {
+                        addResult('success', `✅ Successfully signed in: ${result.user.displayName}`);
+                        return result.user;
+                    }
+                }
             } catch (error) {
-                addResult('error', `Firebase connection error: ${error.message}`);
+                addResult('error', `❌ Authentication error: ${error.message}`);
+                if (error.code === 'auth/popup-blocked') {
+                    addResult('error', '🚫 Popup blocked - Please allow popups for this site');
+                }
+                return null;
             }
         }
 
-        async function testFirestoreWrite() {
-            addResult('info', 'Testing Firestore write...');
-            
+        async function testFirestoreAccess() {
+            addResult('info', '🔍 Testing Firestore database access...');
+
+            const user = await testAuthentication();
+            if (!user) return false;
+
             try {
-                const user = firebase.auth().currentUser;
-                if (!user) {
-                    addResult('error', 'Must be authenticated to test Firestore write');
-                    return;
+                // Test basic database access
+                const testCollection = window.firebaseDb.collection('test');
+                const testDoc = testCollection.doc('connection-test');
+
+                addResult('info', '📝 Attempting to write test document...');
+                await testDoc.set({
+                    message: 'Database connection test',
+                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+                    userId: user.uid
+                });
+
+                addResult('success', '✅ Successfully wrote to Firestore database');
+
+                // Test reading the document back
+                addResult('info', '📖 Attempting to read test document...');
+                const doc = await testDoc.get();
+
+                if (doc.exists) {
+                    addResult('success', '✅ Successfully read from Firestore database');
+                    addResult('info', `📄 Document data: ${JSON.stringify(doc.data(), null, 2)}`);
+                } else {
+                    addResult('error', '❌ Document was written but cannot be read back');
                 }
+
+                // Clean up test document
+                await testDoc.delete();
+                addResult('info', '🗑️ Cleaned up test document');
+
+                return true;
+
+            } catch (error) {
+                addResult('error', `❌ Firestore access error: ${error.message}`);
+
+                if (error.code === 'permission-denied') {
+                    addResult('error', '🚫 Permission denied - Firestore security rules may be blocking access');
+                    addResult('info', '💡 This usually means the Firestore database doesn\'t exist or security rules are too restrictive');
+                } else if (error.code === 'not-found') {
+                    addResult('error', '🔍 Database not found - Firestore database may not be created yet');
+                } else if (error.code === 'unavailable') {
+                    addResult('error', '📡 Database unavailable - Check internet connection');
+                }
+
+                return false;
+            }
+        }
+
+        async function testSecurityRules() {
+            addResult('info', '🔍 Testing Firestore security rules...');
+
+            const user = await testAuthentication();
+            if (!user) return false;
+
+            try {
+                // Test user's own document access
+                addResult('info', '📝 Testing access to own user document...');
+                const userDoc = window.firebaseDb.collection('users').doc(user.uid);
 
                 const testData = {
-                    testMessage: 'Hello from Firestore test',
-                    timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-                    randomNumber: Math.floor(Math.random() * 1000)
+                    expenses: [
+                        {
+                            id: Date.now(),
+                            description: 'Security test expense',
+                            amount: 10.50,
+                            category: 'food',
+                            date: new Date().toISOString().split('T')[0],
+                            timestamp: new Date().toISOString()
+                        }
+                    ],
+                    budget: 1000,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    userInfo: {
+                        name: user.displayName,
+                        email: user.email,
+                        photoURL: user.photoURL
+                    }
                 };
 
-                const docRef = window.firebaseDb.collection('users').doc(user.uid);
-                await docRef.set({ test: testData }, { merge: true });
+                await userDoc.set(testData, { merge: true });
+                addResult('success', '✅ Successfully wrote to own user document');
 
-                addResult('success', `Successfully wrote test data to Firestore for user ${user.uid}`);
+                // Test reading own document
+                const doc = await userDoc.get();
+                if (doc.exists) {
+                    addResult('success', '✅ Successfully read own user document');
+                    const data = doc.data();
+                    addResult('info', `📊 Found ${data.expenses?.length || 0} expenses, budget: $${data.budget || 0}`);
+                } else {
+                    addResult('error', '❌ Cannot read own user document after writing');
+                }
+
+                // Test access to another user's document (should fail)
+                addResult('info', '🚫 Testing access to another user\'s document (should fail)...');
+                const otherUserDoc = window.firebaseDb.collection('users').doc('fake-user-id');
+
+                try {
+                    await otherUserDoc.get();
+                    addResult('error', '⚠️ WARNING: Can access other users\' documents - Security rules may be too permissive');
+                } catch (error) {
+                    if (error.code === 'permission-denied') {
+                        addResult('success', '✅ Correctly blocked access to other users\' documents');
+                    } else {
+                        addResult('info', `ℹ️ Other user access test: ${error.message}`);
+                    }
+                }
+
+                return true;
 
             } catch (error) {
-                addResult('error', `Firestore write error: ${error.message}`);
+                addResult('error', `❌ Security rules test error: ${error.message}`);
+
+                if (error.code === 'permission-denied') {
+                    addResult('error', '🚫 Permission denied - Check Firestore security rules');
+                    addResult('info', '💡 Recommended security rules for this app:');
+                    addResult('info', `
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}`);
+                }
+
+                return false;
             }
         }
 
-        async function testFirestoreRead() {
-            addResult('info', 'Testing Firestore read...');
-            
-            try {
-                const user = firebase.auth().currentUser;
-                if (!user) {
-                    addResult('error', 'Must be authenticated to test Firestore read');
-                    return;
-                }
+        async function testDataStructure() {
+            addResult('info', '🔍 Testing expense tracker data structure...');
 
-                const docRef = window.firebaseDb.collection('users').doc(user.uid);
-                const doc = await docRef.get();
+            const user = await testAuthentication();
+            if (!user) return false;
+
+            try {
+                const userDoc = window.firebaseDb.collection('users').doc(user.uid);
+
+                // Create proper expense tracker data structure
+                const expenseData = {
+                    expenses: [
+                        {
+                            id: Date.now(),
+                            description: 'Test Coffee',
+                            amount: 4.50,
+                            category: 'food',
+                            date: new Date().toISOString().split('T')[0],
+                            timestamp: new Date().toISOString()
+                        },
+                        {
+                            id: Date.now() + 1,
+                            description: 'Test Lunch',
+                            amount: 12.75,
+                            category: 'food',
+                            date: new Date().toISOString().split('T')[0],
+                            timestamp: new Date().toISOString()
+                        }
+                    ],
+                    budget: 500,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    userInfo: {
+                        name: user.displayName,
+                        email: user.email,
+                        photoURL: user.photoURL
+                    }
+                };
+
+                addResult('info', '📝 Writing expense tracker data structure...');
+                await userDoc.set(expenseData, { merge: true });
+                addResult('success', '✅ Successfully wrote expense data');
+
+                // Read back and validate structure
+                addResult('info', '📖 Reading back data to validate structure...');
+                const doc = await userDoc.get();
 
                 if (doc.exists) {
                     const data = doc.data();
-                    addResult('success', `Successfully read data from Firestore: ${JSON.stringify(data, null, 2)}`);
+
+                    // Validate data structure
+                    const hasExpenses = Array.isArray(data.expenses);
+                    const hasBudget = typeof data.budget === 'number';
+                    const hasUserInfo = data.userInfo && typeof data.userInfo === 'object';
+
+                    if (hasExpenses && hasBudget && hasUserInfo) {
+                        addResult('success', '✅ Data structure is correct');
+                        addResult('info', `📊 Found ${data.expenses.length} expenses, budget: $${data.budget}`);
+                        addResult('info', `👤 User: ${data.userInfo.name} (${data.userInfo.email})`);
+
+                        // Test individual expense structure
+                        if (data.expenses.length > 0) {
+                            const expense = data.expenses[0];
+                            const hasRequiredFields = expense.id && expense.description &&
+                                                    typeof expense.amount === 'number' &&
+                                                    expense.category && expense.date;
+
+                            if (hasRequiredFields) {
+                                addResult('success', '✅ Expense structure is correct');
+                            } else {
+                                addResult('error', '❌ Expense structure is missing required fields');
+                            }
+                        }
+
+                        return true;
+                    } else {
+                        addResult('error', '❌ Data structure validation failed');
+                        addResult('error', `Has expenses array: ${hasExpenses}, Has budget: ${hasBudget}, Has user info: ${hasUserInfo}`);
+                    }
                 } else {
-                    addResult('info', 'No document found for current user');
+                    addResult('error', '❌ No document found after writing');
                 }
 
+                return false;
+
             } catch (error) {
-                addResult('error', `Firestore read error: ${error.message}`);
+                addResult('error', `❌ Data structure test error: ${error.message}`);
+                return false;
             }
         }
 
         let realtimeUnsubscribe = null;
 
-        async function testRealtimeListener() {
-            addResult('info', 'Testing real-time listener...');
-            
-            try {
-                const user = firebase.auth().currentUser;
-                if (!user) {
-                    addResult('error', 'Must be authenticated to test real-time listener');
-                    return;
-                }
+        async function testRealtimeSync() {
+            addResult('info', '🔍 Testing real-time synchronization...');
 
+            const user = await testAuthentication();
+            if (!user) return false;
+
+            try {
                 // Remove existing listener
                 if (realtimeUnsubscribe) {
                     realtimeUnsubscribe();
                 }
 
-                const docRef = window.firebaseDb.collection('users').doc(user.uid);
-                
-                realtimeUnsubscribe = docRef.onSnapshot((doc) => {
+                const userDoc = window.firebaseDb.collection('users').doc(user.uid);
+                let updateCount = 0;
+
+                addResult('info', '👂 Setting up real-time listener...');
+                realtimeUnsubscribe = userDoc.onSnapshot((doc) => {
+                    updateCount++;
+
                     if (doc.exists) {
                         const data = doc.data();
-                        addResult('success', `Real-time update received: ${JSON.stringify(data.test || {}, null, 2)}`);
+                        addResult('success', `🔄 Real-time update #${updateCount} received`);
+                        addResult('info', `📊 Expenses: ${data.expenses?.length || 0}, Budget: $${data.budget || 0}`);
+
+                        if (data.lastUpdated) {
+                            const lastUpdate = data.lastUpdated.toDate ? data.lastUpdated.toDate() : new Date(data.lastUpdated);
+                            addResult('info', `⏰ Last updated: ${lastUpdate.toLocaleString()}`);
+                        }
                     } else {
-                        addResult('info', 'Real-time listener: No document exists');
+                        addResult('info', '📄 Real-time listener: No document exists yet');
                     }
                 }, (error) => {
-                    addResult('error', `Real-time listener error: ${error.message}`);
+                    addResult('error', `❌ Real-time listener error: ${error.message}`);
                 });
 
-                addResult('success', 'Real-time listener set up successfully. Try writing data to see updates.');
+                addResult('success', '✅ Real-time listener set up successfully');
+                addResult('info', '💡 Now try adding an expense in another tab/device to see real-time updates');
+
+                // Test by making a change
+                setTimeout(async () => {
+                    try {
+                        addResult('info', '🧪 Testing real-time sync by adding a test expense...');
+                        const currentDoc = await userDoc.get();
+                        const currentData = currentDoc.exists ? currentDoc.data() : {};
+
+                        const newExpense = {
+                            id: Date.now(),
+                            description: `Real-time test ${new Date().toLocaleTimeString()}`,
+                            amount: Math.floor(Math.random() * 50) + 1,
+                            category: 'other',
+                            date: new Date().toISOString().split('T')[0],
+                            timestamp: new Date().toISOString()
+                        };
+
+                        const updatedExpenses = [...(currentData.expenses || []), newExpense];
+
+                        await userDoc.set({
+                            expenses: updatedExpenses,
+                            lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+                        }, { merge: true });
+
+                        addResult('info', '📝 Added test expense - should trigger real-time update');
+
+                    } catch (error) {
+                        addResult('error', `❌ Error testing real-time sync: ${error.message}`);
+                    }
+                }, 2000);
+
+                return true;
 
             } catch (error) {
-                addResult('error', `Real-time listener setup error: ${error.message}`);
+                addResult('error', `❌ Real-time sync test error: ${error.message}`);
+                return false;
             }
         }
 
-        // Auto-run connection test when page loads
+        async function createSampleData() {
+            addResult('info', '🔍 Creating sample expense data...');
+
+            const user = await testAuthentication();
+            if (!user) return false;
+
+            try {
+                const userDoc = window.firebaseDb.collection('users').doc(user.uid);
+
+                const sampleData = {
+                    expenses: [
+                        {
+                            id: Date.now(),
+                            description: 'Morning Coffee',
+                            amount: 4.50,
+                            category: 'food',
+                            date: new Date().toISOString().split('T')[0],
+                            timestamp: new Date().toISOString()
+                        },
+                        {
+                            id: Date.now() + 1,
+                            description: 'Lunch at Restaurant',
+                            amount: 15.75,
+                            category: 'food',
+                            date: new Date().toISOString().split('T')[0],
+                            timestamp: new Date().toISOString()
+                        },
+                        {
+                            id: Date.now() + 2,
+                            description: 'Gas for Car',
+                            amount: 45.00,
+                            category: 'transportation',
+                            date: new Date().toISOString().split('T')[0],
+                            timestamp: new Date().toISOString()
+                        }
+                    ],
+                    budget: 1000,
+                    lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
+                    userInfo: {
+                        name: user.displayName,
+                        email: user.email,
+                        photoURL: user.photoURL
+                    }
+                };
+
+                await userDoc.set(sampleData, { merge: true });
+                addResult('success', '✅ Sample data created successfully');
+                addResult('info', '💡 You can now test the main expense tracker app with this data');
+
+                return true;
+
+            } catch (error) {
+                addResult('error', `❌ Error creating sample data: ${error.message}`);
+                return false;
+            }
+        }
+
+        async function testCrossDeviceSync() {
+            addResult('info', '🔍 Testing cross-device synchronization...');
+            addResult('info', '📱 Instructions for cross-device sync test:');
+            addResult('info', '1. Keep this page open');
+            addResult('info', '2. Open the main expense tracker in another tab/device');
+            addResult('info', '3. Sign in with the same Google account');
+            addResult('info', '4. Add an expense in the main app');
+            addResult('info', '5. Watch for real-time updates here');
+
+            // Set up listener for cross-device testing
+            await testRealtimeSync();
+        }
+
+        // Auto-run diagnostic tests when page loads
         document.addEventListener('DOMContentLoaded', () => {
-            setTimeout(testFirebaseConnection, 1000);
+            setTimeout(async () => {
+                addResult('info', '🚀 Starting automatic diagnostics...');
+
+                const connectionOk = await testFirebaseConnection();
+                if (connectionOk) {
+                    const authOk = await testAuthentication();
+                    if (authOk) {
+                        await testFirestoreAccess();
+                    }
+                }
+            }, 1000);
         });
     </script>
 </body>

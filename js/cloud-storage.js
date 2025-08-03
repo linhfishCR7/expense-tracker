@@ -90,6 +90,18 @@ class CloudStorageManager {
                 // Save to localStorage as backup
                 this.saveToLocalBackup('expenses', expenses);
                 return true; // Return true since we've handled it gracefully
+            } else if (error.code === 'permission-denied') {
+                console.error('🚫 Firestore permission denied - Database may not be set up properly');
+                console.error('💡 Please check FIRESTORE_SETUP_GUIDE.md for setup instructions');
+                this.showFirestoreSetupError();
+                this.saveToLocalBackup('expenses', expenses);
+                return false;
+            } else if (error.code === 'not-found') {
+                console.error('🔍 Firestore database not found - Database may not be created');
+                console.error('💡 Please create Firestore database in Firebase Console');
+                this.showFirestoreSetupError();
+                this.saveToLocalBackup('expenses', expenses);
+                return false;
             } else {
                 console.error('❌ Error saving expenses to cloud:', error);
                 this.saveToLocalBackup('expenses', expenses);
@@ -398,6 +410,80 @@ class CloudStorageManager {
             pendingWrites: this.pendingWrites.length,
             lastError: this.lastError || null
         };
+    }
+
+    // Show Firestore setup error notification
+    showFirestoreSetupError() {
+        if (window.notificationManager && !this.setupErrorShown) {
+            this.setupErrorShown = true;
+
+            window.notificationManager.showNotification(
+                window.notificationManager.createNotification('firestore-setup-error', 'error', 10000,
+                    '🚫 Firestore Database Setup Required - Click for instructions')
+            );
+
+            // Show detailed setup modal after a delay
+            setTimeout(() => {
+                this.showFirestoreSetupModal();
+            }, 2000);
+        }
+    }
+
+    // Show Firestore setup instructions modal
+    showFirestoreSetupModal() {
+        if (!window.notificationManager) return;
+
+        const modal = window.notificationManager.createModal('firestore-setup-modal', 'Firestore Database Setup Required');
+        modal.innerHTML = `
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>🔥 Firestore Database Setup Required</h2>
+                    <button class="modal-close" onclick="notificationManager.closeModal('firestore-setup-modal')">&times;</button>
+                </div>
+                <div class="modal-body">
+                    <div class="setup-error-info">
+                        <p><strong>Issue:</strong> The Firestore database is not properly set up for cross-device sync.</p>
+
+                        <h3>🚀 Quick Setup Steps:</h3>
+                        <ol>
+                            <li>Go to <a href="https://console.firebase.google.com/project/expense-tracker-12072" target="_blank">Firebase Console</a></li>
+                            <li>Click "Firestore Database" → "Create database"</li>
+                            <li>Choose "Start in test mode" → Select location → "Done"</li>
+                            <li>Go to "Rules" tab and set secure rules</li>
+                        </ol>
+
+                        <h3>🧪 Test Your Setup:</h3>
+                        <p>Use the <a href="test-firestore.html" target="_blank">Firestore Diagnostic Tool</a> to verify your setup.</p>
+
+                        <h3>📖 Detailed Instructions:</h3>
+                        <p>See <code>FIRESTORE_SETUP_GUIDE.md</code> for complete setup instructions.</p>
+
+                        <div class="setup-status">
+                            <p><strong>Current Status:</strong></p>
+                            <ul>
+                                <li>✅ Firebase Project: expense-tracker-12072</li>
+                                <li>✅ Authentication: Working</li>
+                                <li>❌ Firestore Database: Not accessible</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn-primary" onclick="window.open('https://console.firebase.google.com/project/expense-tracker-12072', '_blank')">
+                        Open Firebase Console
+                    </button>
+                    <button class="btn-secondary" onclick="window.open('test-firestore.html', '_blank')">
+                        Test Setup
+                    </button>
+                    <button class="btn-secondary" onclick="notificationManager.closeModal('firestore-setup-modal')">
+                        Close
+                    </button>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+        modal.style.display = 'flex';
     }
 }
 
