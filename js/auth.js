@@ -111,7 +111,12 @@ class AuthManager {
             const user = result.user;
 
             console.log('Sign-in successful:', user.displayName);
-            
+
+            // Close any open modals
+            if (window.notificationManager) {
+                window.notificationManager.closeAllModals();
+            }
+
             // Analytics/tracking (optional)
             this.trackAuthEvent('google_sign_in_success');
 
@@ -141,12 +146,36 @@ class AuthManager {
             // User is signed in
             this.hideAuthOverlay();
             this.showUserProfile(user);
+
+            // Update storage manager and switch to persistent mode
+            if (window.storageManager) {
+                window.storageManager.setStorageMode('persistent');
+                window.storageManager.setCurrentUser(user);
+            }
+
+            // Update storage banner
+            if (window.notificationManager) {
+                window.notificationManager.updateStorageBanner();
+            }
+
             console.log('User authenticated:', user.displayName);
         } else {
-            // User is signed out
-            this.showAuthOverlay();
+            // User is signed out - don't show auth overlay, allow session mode
+            this.hideAuthOverlay();
             this.hideUserProfile();
-            console.log('User signed out');
+
+            // Update storage manager for session mode
+            if (window.storageManager) {
+                window.storageManager.setStorageMode('session');
+                window.storageManager.setCurrentUser(null);
+            }
+
+            // Update storage banner
+            if (window.notificationManager) {
+                window.notificationManager.updateStorageBanner();
+            }
+
+            console.log('User signed out - continuing in session mode');
         }
     }
 

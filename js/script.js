@@ -24,15 +24,81 @@ class ExpenseTracker {
     handleAuthStateChange(user) {
         this.currentUser = user;
 
+        // Update storage manager with current user
+        if (window.storageManager) {
+            window.storageManager.setCurrentUser(user);
+        }
+
         if (user && !this.isInitialized) {
             // User is authenticated, initialize the app
             this.initializeApp();
             this.isInitialized = true;
-        } else if (!user) {
-            // User signed out, reset the app
-            this.resetApp();
-            this.isInitialized = false;
+
+            // Check if we should migrate from session to persistent storage
+            this.checkForDataMigration(user);
+        } else if (!user && this.isInitialized) {
+            // User signed out, but keep app initialized for session mode
+            this.handleSignOut();
+        } else if (!user && !this.isInitialized) {
+            // No user, initialize in session mode
+            this.initializeSessionMode();
         }
+    }
+
+    async checkForDataMigration(user) {
+        if (window.storageManager && window.storageManager.hasSessionData()) {
+            // Ask user if they want to migrate their session data
+            const migrationResult = await window.storageManager.migrateToPersonal(user);
+
+            if (migrationResult && window.notificationManager) {
+                window.notificationManager.showNotification(
+                    window.notificationManager.createNotification('migration-success', 'success', 5000,
+                        `☁️ Welcome! Migrated ${migrationResult.expenses} expenses to your cloud storage.`)
+                );
+
+                // Reload data to reflect migration
+                this.loadUserData();
+                this.updateDisplay();
+                this.renderExpenses();
+                this.drawCharts();
+            }
+        }
+    }
+
+    initializeSessionMode() {
+        // Initialize app without authentication for session-only mode
+        this.loadUserData();
+        this.initializeEventListeners();
+        this.updateDisplay();
+        this.renderExpenses();
+        this.drawCharts();
+        this.setTodayDate();
+        this.isInitialized = true;
+
+        console.log('💰 Expense tracker initialized in session mode');
+
+        // Show storage choice modal for first-time users
+        if (!localStorage.getItem('storage_choice_shown') && window.notificationManager) {
+            localStorage.setItem('storage_choice_shown', 'true');
+            setTimeout(() => {
+                window.notificationManager.showStorageChoiceModal();
+            }, 1000);
+        }
+    }
+
+    handleSignOut() {
+        // User signed out, switch to session mode but keep data
+        if (window.storageManager) {
+            window.storageManager.setStorageMode('session');
+        }
+
+        // Reload data in session mode
+        this.loadUserData();
+        this.updateDisplay();
+        this.renderExpenses();
+        this.drawCharts();
+
+        console.log('💰 Switched to session mode after sign out');
     }
 
     initializeApp() {
@@ -59,23 +125,43 @@ class ExpenseTracker {
     }
 
     loadUserData() {
-        if (!this.currentUser) return;
+        // Use storage manager for dual storage support
+        if (window.storageManager) {
+            this.expenses = window.storageManager.loadData('expenses', []);
+            this.budget = window.storageManager.loadData('budget', 0);
+        } else {
+            // Fallback to old method if storage manager not available
+            if (this.currentUser) {
+                const userId = this.currentUser.uid;
+                this.expenses = JSON.parse(localStorage.getItem(`expenses_${userId}`)) || [];
+                this.budget = parseFloat(localStorage.getItem(`budget_${userId}`)) || 0;
+            } else {
+                this.expenses = JSON.parse(localStorage.getItem('expenses_session')) || [];
+                this.budget = parseFloat(localStorage.getItem('budget_session')) || 0;
+            }
+        }
 
-        const userId = this.currentUser.uid;
-
-        // Load user-specific data from localStorage
-        this.expenses = JSON.parse(localStorage.getItem(`expenses_${userId}`)) || [];
-        this.budget = parseFloat(localStorage.getItem(`budget_${userId}`)) || 0;
+        console.log(`📊 Loaded ${this.expenses.length} expenses, budget: $${this.budget}`);
     }
 
     saveUserData() {
-        if (!this.currentUser) return;
+        // Use storage manager for dual storage support
+        if (window.storageManager) {
+            window.storageManager.saveData('expenses', this.expenses);
+            window.storageManager.saveData('budget', this.budget);
+        } else {
+            // Fallback to old method if storage manager not available
+            if (this.currentUser) {
+                const userId = this.currentUser.uid;
+                localStorage.setItem(`expenses_${userId}`, JSON.stringify(this.expenses));
+                localStorage.setItem(`budget_${userId}`, this.budget.toString());
+            } else {
+                localStorage.setItem('expenses_session', JSON.stringify(this.expenses));
+                localStorage.setItem('budget_session', this.budget.toString());
+            }
+        }
 
-        const userId = this.currentUser.uid;
-
-        // Save user-specific data to localStorage
-        localStorage.setItem(`expenses_${userId}`, JSON.stringify(this.expenses));
-        localStorage.setItem(`budget_${userId}`, this.budget.toString());
+        console.log(`💾 Saved ${this.expenses.length} expenses, budget: $${this.budget}`);
     }
 
     initializeEventListeners() {
