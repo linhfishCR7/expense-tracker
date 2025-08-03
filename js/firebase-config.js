@@ -40,6 +40,9 @@ try {
     // Initialize Firebase Auth
     const auth = firebase.auth();
 
+    // Initialize Firestore
+    const db = firebase.firestore();
+
     // Test the connection with a simple operation
     auth.onAuthStateChanged((user) => {
         if (user) {
@@ -56,6 +59,7 @@ try {
 
     // Export for use in other files
     window.firebaseAuth = auth;
+    window.firebaseDb = db;
     window.googleProvider = googleProvider;
     window.firebaseConfigured = true;
     window.demoMode = false;

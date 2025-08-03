@@ -60,68 +60,122 @@ class StorageManager {
     }
 
     // Save data based on current storage mode
-    saveData(key, data) {
+    async saveData(key, data) {
         const storageKey = this.getStorageKey(key);
-        
+
         if (this.storageMode === 'session') {
             // Use sessionStorage for temporary data
             sessionStorage.setItem(storageKey, JSON.stringify(data));
             localStorage.setItem(storageKey, JSON.stringify(data)); // Backup in localStorage
+            console.log(`💾 Data saved to session storage:`, key);
         } else {
-            // Use localStorage for persistent data
-            localStorage.setItem(storageKey, JSON.stringify(data));
+            // Use cloud storage for persistent data
+            if (window.cloudStorage && window.cloudStorage.isAvailable()) {
+                try {
+                    if (key === 'expenses') {
+                        await window.cloudStorage.saveExpenses(data);
+                    } else if (key === 'budget') {
+                        await window.cloudStorage.saveBudget(data);
+                    }
+                    console.log(`☁️ Data saved to cloud (${this.storageMode} mode):`, key);
+                } catch (error) {
+                    console.error('❌ Cloud save failed, falling back to localStorage:', error);
+                    localStorage.setItem(storageKey, JSON.stringify(data));
+                }
+            } else {
+                // Fallback to localStorage if cloud not available
+                localStorage.setItem(storageKey, JSON.stringify(data));
+                console.log(`💾 Data saved to localStorage (cloud unavailable):`, key);
+            }
         }
-        
-        console.log(`💾 Data saved (${this.storageMode} mode):`, key);
     }
 
     // Load data based on current storage mode
-    loadData(key, defaultValue = null) {
+    async loadData(key, defaultValue = null) {
         const storageKey = this.getStorageKey(key);
-        let data = null;
-        
+
         if (this.storageMode === 'session') {
             // Try sessionStorage first, then localStorage as backup
-            data = sessionStorage.getItem(storageKey) || localStorage.getItem(storageKey);
-        } else {
-            // Use localStorage for persistent data
-            data = localStorage.getItem(storageKey);
-        }
-        
-        if (data) {
-            try {
-                return JSON.parse(data);
-            } catch (error) {
-                console.error('Error parsing stored data:', error);
-                return defaultValue;
+            const data = sessionStorage.getItem(storageKey) || localStorage.getItem(storageKey);
+            if (data) {
+                try {
+                    return JSON.parse(data);
+                } catch (error) {
+                    console.error('Error parsing session data:', error);
+                    return defaultValue;
+                }
             }
+            return defaultValue;
+        } else {
+            // Use cloud storage for persistent data
+            if (window.cloudStorage && window.cloudStorage.isAvailable()) {
+                try {
+                    const cloudData = await window.cloudStorage.loadUserData();
+                    if (key === 'expenses') {
+                        return cloudData.expenses || defaultValue;
+                    } else if (key === 'budget') {
+                        return cloudData.budget || defaultValue;
+                    }
+                } catch (error) {
+                    console.error('❌ Cloud load failed, falling back to localStorage:', error);
+                }
+            }
+
+            // Fallback to localStorage if cloud not available
+            const data = localStorage.getItem(storageKey);
+            if (data) {
+                try {
+                    return JSON.parse(data);
+                } catch (error) {
+                    console.error('Error parsing localStorage data:', error);
+                    return defaultValue;
+                }
+            }
+            return defaultValue;
         }
-        
-        return defaultValue;
     }
 
     // Migrate data from session to persistent storage
     async migrateToPersonal(user) {
         console.log('🔄 Migrating data from session to persistent storage...');
-        
+
         const sessionExpenses = this.loadSessionData('expenses');
         const sessionBudget = this.loadSessionData('budget');
-        
+
         if (sessionExpenses && sessionExpenses.length > 0) {
-            // Save to persistent storage
+            // Set user and mode first
             this.currentUser = user;
             this.setStorageMode('persistent');
-            
-            this.saveData('expenses', sessionExpenses);
-            this.saveData('budget', sessionBudget || 0);
-            
-            // Clear session data
-            this.clearSessionData();
-            
-            console.log(`✅ Migrated ${sessionExpenses.length} expenses to persistent storage`);
-            return { expenses: sessionExpenses.length, budget: sessionBudget || 0 };
+
+            // Set user in cloud storage
+            if (window.cloudStorage) {
+                window.cloudStorage.setCurrentUser(user);
+
+                // Use cloud storage migration method
+                const migrationSuccess = await window.cloudStorage.migrateLocalToCloud(
+                    sessionExpenses,
+                    sessionBudget || 0
+                );
+
+                if (migrationSuccess) {
+                    // Clear session data after successful migration
+                    this.clearSessionData();
+                    console.log(`✅ Migrated ${sessionExpenses.length} expenses to cloud storage`);
+                    return { expenses: sessionExpenses.length, budget: sessionBudget || 0 };
+                } else {
+                    console.error('❌ Cloud migration failed, keeping session data');
+                    return null;
+                }
+            } else {
+                // Fallback to localStorage migration
+                await this.saveData('expenses', sessionExpenses);
+                await this.saveData('budget', sessionBudget || 0);
+                this.clearSessionData();
+                console.log(`✅ Migrated ${sessionExpenses.length} expenses to localStorage`);
+                return { expenses: sessionExpenses.length, budget: sessionBudget || 0 };
+            }
         }
-        
+
         return null;
     }
 

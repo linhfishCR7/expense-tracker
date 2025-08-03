@@ -187,11 +187,16 @@ class NotificationManager {
                             📱 Switch to Session Mode
                         </button>
                         <p class="action-note">⚠️ Your data will only be stored locally</p>
-                        
-                        <button class="btn-danger" onclick="notificationManager.signOutAndClearData()">
-                            🚪 Sign Out & Clear Data
+
+                        <button class="btn-secondary" onclick="notificationManager.signOutOnly()">
+                            🚪 Sign Out
                         </button>
-                        <p class="action-note">⚠️ This will remove all your expense data</p>
+                        <p class="action-note">ℹ️ Your data will remain in the cloud</p>
+
+                        <button class="btn-danger" onclick="notificationManager.clearAllDataPermanently()">
+                            🗑️ Clear All Data
+                        </button>
+                        <p class="action-note">⚠️ This will permanently delete all your expense data from the cloud</p>
                     `}
                 </div>
             </div>
@@ -262,22 +267,49 @@ class NotificationManager {
         );
     }
 
-    // Sign out and clear data
-    signOutAndClearData() {
+    // Sign out only (keep data in cloud)
+    signOutOnly() {
         this.showConfirmationDialog(
-            'Sign Out & Clear Data?',
-            '⚠️ This will sign you out and permanently delete all your expense data. This action cannot be undone!',
+            'Sign Out?',
+            'ℹ️ You will be signed out, but your data will remain safely stored in the cloud. You can sign back in anytime to access it.',
             async () => {
-                window.storageManager.clearAllData();
-                
                 if (window.authManager) {
                     await window.authManager.signOut();
                 }
-                
+
                 this.closeAllModals();
-                
-                this.showNotification(this.createNotification('data-cleared', 'info', 3000,
-                    '🗑️ Signed out and data cleared.'));
+
+                this.showNotification(this.createNotification('signed-out', 'info', 3000,
+                    '🚪 Signed out successfully. Your data is safe in the cloud.'));
+            }
+        );
+    }
+
+    // Clear all data permanently
+    clearAllDataPermanently() {
+        this.showConfirmationDialog(
+            'Permanently Delete All Data?',
+            '⚠️ This will permanently delete ALL your expense data from the cloud. This action cannot be undone! Are you absolutely sure?',
+            async () => {
+                // Clear from cloud storage
+                if (window.cloudStorage && window.cloudStorage.isAvailable()) {
+                    await window.cloudStorage.clearUserData();
+                }
+
+                // Clear local storage
+                if (window.storageManager) {
+                    window.storageManager.clearAllData();
+                }
+
+                // Sign out
+                if (window.authManager) {
+                    await window.authManager.signOut();
+                }
+
+                this.closeAllModals();
+
+                this.showNotification(this.createNotification('data-cleared', 'info', 5000,
+                    '🗑️ All data permanently deleted from cloud and local storage.'));
             }
         );
     }

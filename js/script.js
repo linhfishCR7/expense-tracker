@@ -65,9 +65,9 @@ class ExpenseTracker {
         }
     }
 
-    initializeSessionMode() {
+    async initializeSessionMode() {
         // Initialize app without authentication for session-only mode
-        this.loadUserData();
+        await this.loadUserData();
         this.initializeEventListeners();
         this.updateDisplay();
         this.renderExpenses();
@@ -101,16 +101,21 @@ class ExpenseTracker {
         console.log('💰 Switched to session mode after sign out');
     }
 
-    initializeApp() {
+    async initializeApp() {
         // Load user-specific data
-        this.loadUserData();
+        await this.loadUserData();
         this.initializeEventListeners();
         this.updateDisplay();
         this.renderExpenses();
         this.drawCharts();
         this.setTodayDate();
 
-        console.log('Expense tracker initialized for user:', this.currentUser.displayName);
+        // Set up cloud storage user
+        if (window.cloudStorage && this.currentUser) {
+            window.cloudStorage.setCurrentUser(this.currentUser);
+        }
+
+        console.log('💰 Expense tracker initialized for user:', this.currentUser?.displayName || 'session user');
     }
 
     resetApp() {
@@ -124,11 +129,11 @@ class ExpenseTracker {
         console.log('Expense tracker reset');
     }
 
-    loadUserData() {
+    async loadUserData() {
         // Use storage manager for dual storage support
         if (window.storageManager) {
-            this.expenses = window.storageManager.loadData('expenses', []);
-            this.budget = window.storageManager.loadData('budget', 0);
+            this.expenses = await window.storageManager.loadData('expenses', []);
+            this.budget = await window.storageManager.loadData('budget', 0);
         } else {
             // Fallback to old method if storage manager not available
             if (this.currentUser) {
@@ -144,11 +149,11 @@ class ExpenseTracker {
         console.log(`📊 Loaded ${this.expenses.length} expenses, budget: $${this.budget}`);
     }
 
-    saveUserData() {
+    async saveUserData() {
         // Use storage manager for dual storage support
         if (window.storageManager) {
-            window.storageManager.saveData('expenses', this.expenses);
-            window.storageManager.saveData('budget', this.budget);
+            await window.storageManager.saveData('expenses', this.expenses);
+            await window.storageManager.saveData('budget', this.budget);
         } else {
             // Fallback to old method if storage manager not available
             if (this.currentUser) {
