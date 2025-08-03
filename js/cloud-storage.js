@@ -71,14 +71,19 @@ class CloudStorageManager {
             console.log(`☁️ Saved ${expenses.length} expenses to cloud`);
             return true;
         } catch (error) {
-            console.error('❌ Error saving expenses to cloud:', error);
-            
-            if (!this.isOnline) {
-                // Queue for later when online
+            // Handle specific Firebase errors
+            if (error.code === 'unavailable' || error.message.includes('offline') || !this.isOnline) {
+                console.warn('⚠️ Cloud unavailable, queuing expenses for later sync');
                 this.pendingWrites.push({ type: 'expenses', data: expenses });
-                console.log('📝 Queued expenses for sync when online');
+
+                // Save to localStorage as backup
+                this.saveToLocalBackup('expenses', expenses);
+                return true; // Return true since we've handled it gracefully
+            } else {
+                console.error('❌ Error saving expenses to cloud:', error);
+                this.saveToLocalBackup('expenses', expenses);
+                return false;
             }
-            return false;
         }
     }
 
@@ -99,13 +104,19 @@ class CloudStorageManager {
             console.log(`☁️ Saved budget $${budget} to cloud`);
             return true;
         } catch (error) {
-            console.error('❌ Error saving budget to cloud:', error);
-            
-            if (!this.isOnline) {
+            // Handle specific Firebase errors
+            if (error.code === 'unavailable' || error.message.includes('offline') || !this.isOnline) {
+                console.warn('⚠️ Cloud unavailable, queuing budget for later sync');
                 this.pendingWrites.push({ type: 'budget', data: budget });
-                console.log('📝 Queued budget for sync when online');
+
+                // Save to localStorage as backup
+                this.saveToLocalBackup('budget', budget);
+                return true; // Return true since we've handled it gracefully
+            } else {
+                console.error('❌ Error saving budget to cloud:', error);
+                this.saveToLocalBackup('budget', budget);
+                return false;
             }
-            return false;
         }
     }
 
@@ -123,10 +134,10 @@ class CloudStorageManager {
             if (doc.exists) {
                 const data = doc.data();
                 console.log(`☁️ Loaded ${data.expenses?.length || 0} expenses and budget $${data.budget || 0} from cloud`);
-                
+
                 return {
-                    expenses: data.expenses || [],
-                    budget: data.budget || 0,
+                    expenses: Array.isArray(data.expenses) ? data.expenses : [],
+                    budget: typeof data.budget === 'number' ? data.budget : 0,
                     lastUpdated: data.lastUpdated
                 };
             } else {
@@ -134,9 +145,36 @@ class CloudStorageManager {
                 return { expenses: [], budget: 0 };
             }
         } catch (error) {
-            console.error('❌ Error loading data from cloud:', error);
-            return { expenses: [], budget: 0 };
+            // Handle specific Firebase errors
+            if (error.code === 'unavailable' || error.message.includes('offline')) {
+                console.warn('⚠️ Cloud storage offline, using local fallback');
+                return this.loadFromLocalFallback();
+            } else if (error.code === 'permission-denied') {
+                console.error('❌ Permission denied accessing cloud data');
+                return { expenses: [], budget: 0 };
+            } else {
+                console.error('❌ Error loading data from cloud:', error);
+                return this.loadFromLocalFallback();
+            }
         }
+    }
+
+    // Fallback to localStorage when cloud is unavailable
+    loadFromLocalFallback() {
+        try {
+            if (this.currentUser) {
+                const userId = this.currentUser.uid;
+                const expenses = JSON.parse(localStorage.getItem(`expenses_${userId}`)) || [];
+                const budget = parseFloat(localStorage.getItem(`budget_${userId}`)) || 0;
+
+                console.log('📱 Loaded from localStorage fallback');
+                return { expenses, budget };
+            }
+        } catch (error) {
+            console.error('❌ Error loading from localStorage fallback:', error);
+        }
+
+        return { expenses: [], budget: 0 };
     }
 
     // Set up real-time listeners for data changes
@@ -153,18 +191,31 @@ class CloudStorageManager {
             if (doc.exists) {
                 const data = doc.data();
                 console.log('🔄 Real-time update received from cloud');
-                
+
                 // Notify listeners about the update
                 this.listeners.forEach(callback => {
-                    callback({
-                        expenses: data.expenses || [],
-                        budget: data.budget || 0,
-                        lastUpdated: data.lastUpdated
-                    });
+                    try {
+                        callback({
+                            expenses: Array.isArray(data.expenses) ? data.expenses : [],
+                            budget: typeof data.budget === 'number' ? data.budget : 0,
+                            lastUpdated: data.lastUpdated
+                        });
+                    } catch (error) {
+                        console.error('❌ Error in real-time listener callback:', error);
+                    }
                 });
             }
         }, (error) => {
-            console.error('❌ Real-time listener error:', error);
+            // Handle specific listener errors
+            if (error.code === 'unavailable' || error.message.includes('offline')) {
+                console.warn('⚠️ Real-time listener offline, will reconnect when online');
+            } else if (error.code === 'permission-denied') {
+                console.error('❌ Permission denied for real-time updates');
+            } else {
+                console.error('❌ Real-time listener error:', error);
+            }
+
+            this.lastError = error;
         });
     }
 
@@ -294,15 +345,41 @@ class CloudStorageManager {
     mergeExpenses(localExpenses, cloudExpenses) {
         const merged = [...cloudExpenses];
         const existingIds = new Set(cloudExpenses.map(e => e.id));
-        
+
         localExpenses.forEach(expense => {
             if (!existingIds.has(expense.id)) {
                 merged.push(expense);
             }
         });
-        
+
         // Sort by timestamp (newest first)
         return merged.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    }
+
+    // Save to localStorage as backup when cloud is unavailable
+    saveToLocalBackup(key, data) {
+        if (!this.currentUser) return;
+
+        try {
+            const userId = this.currentUser.uid;
+            const storageKey = `${key}_${userId}`;
+            localStorage.setItem(storageKey, JSON.stringify(data));
+            console.log(`💾 Saved ${key} to localStorage backup`);
+        } catch (error) {
+            console.error('❌ Error saving to localStorage backup:', error);
+        }
+    }
+
+    // Enhanced connection status with error handling
+    getConnectionStatus() {
+        return {
+            online: this.isOnline,
+            connected: this.isAvailable(),
+            hasUser: !!this.currentUser,
+            hasDatabase: !!this.db,
+            pendingWrites: this.pendingWrites.length,
+            lastError: this.lastError || null
+        };
     }
 }
 

@@ -112,9 +112,11 @@ class StorageManager {
                 try {
                     const cloudData = await window.cloudStorage.loadUserData();
                     if (key === 'expenses') {
-                        return cloudData.expenses || defaultValue;
+                        const expenses = cloudData.expenses || defaultValue;
+                        return Array.isArray(expenses) ? expenses : defaultValue;
                     } else if (key === 'budget') {
-                        return cloudData.budget || defaultValue;
+                        const budget = cloudData.budget || defaultValue;
+                        return typeof budget === 'number' ? budget : defaultValue;
                     }
                 } catch (error) {
                     console.error('❌ Cloud load failed, falling back to localStorage:', error);
@@ -244,16 +246,34 @@ class StorageManager {
     }
 
     // Get data summary for migration confirmation
-    getDataSummary() {
-        const expenses = this.loadData('expenses', []);
-        const budget = this.loadData('budget', 0);
-        
-        return {
-            expenseCount: expenses.length,
-            totalSpent: expenses.reduce((sum, expense) => sum + expense.amount, 0),
-            budget: budget,
-            hasData: expenses.length > 0 || budget > 0
-        };
+    async getDataSummary() {
+        try {
+            const expenses = await this.loadData('expenses', []);
+            const budget = await this.loadData('budget', 0);
+
+            // Ensure expenses is always an array
+            const expensesArray = Array.isArray(expenses) ? expenses : [];
+            const budgetNumber = typeof budget === 'number' ? budget : 0;
+
+            return {
+                expenseCount: expensesArray.length,
+                totalSpent: expensesArray.reduce((sum, expense) => {
+                    const amount = typeof expense?.amount === 'number' ? expense.amount : 0;
+                    return sum + amount;
+                }, 0),
+                budget: budgetNumber,
+                hasData: expensesArray.length > 0 || budgetNumber > 0
+            };
+        } catch (error) {
+            console.error('❌ Error getting data summary:', error);
+            // Return safe defaults on error
+            return {
+                expenseCount: 0,
+                totalSpent: 0,
+                budget: 0,
+                hasData: false
+            };
+        }
     }
 }
 

@@ -34,8 +34,9 @@ class NotificationManager {
     updateStorageBanner() {
         const banner = document.getElementById('storage-banner');
         if (!banner) return;
-        
+
         const storageInfo = window.storageManager.getStorageInfo();
+        const connectionStatus = window.cloudStorage ? window.cloudStorage.getConnectionStatus() : { online: true };
         
         if (storageInfo.isSession) {
             banner.innerHTML = `
@@ -51,19 +52,24 @@ class NotificationManager {
             `;
             banner.className = 'storage-banner session-mode visible';
         } else if (storageInfo.isPersistent) {
+            const statusIcon = connectionStatus.online ? '☁️' : '📱';
+            const statusText = connectionStatus.online ?
+                'Cloud Sync: Your data is saved and synced across devices' :
+                'Offline: Changes will sync when connection restored';
+
             banner.innerHTML = `
                 <div class="storage-banner-content persistent-mode">
                     <div class="storage-info">
-                        <span class="storage-icon">☁️</span>
-                        <span class="storage-text">Cloud Sync: Your data is saved and synced across devices</span>
+                        <span class="storage-icon">${statusIcon}</span>
+                        <span class="storage-text">${statusText}</span>
                         ${storageInfo.userName ? `<span class="user-name">(${storageInfo.userName})</span>` : ''}
                     </div>
-                    <button class="storage-settings-btn" onclick="notificationManager.showStorageSettings()">
+                    <button class="storage-settings-btn" onclick="notificationManager.showStorageSettings().catch(console.error)">
                         Settings
                     </button>
                 </div>
             `;
-            banner.className = 'storage-banner persistent-mode visible';
+            banner.className = `storage-banner persistent-mode ${connectionStatus.online ? 'online' : 'offline'} visible`;
         }
     }
 
@@ -136,9 +142,9 @@ class NotificationManager {
     }
 
     // Show storage settings modal
-    showStorageSettings() {
+    async showStorageSettings() {
         const storageInfo = window.storageManager.getStorageInfo();
-        const dataSummary = window.storageManager.getDataSummary();
+        const dataSummary = await window.storageManager.getDataSummary();
         
         const modal = this.createModal('storage-settings-modal', 'Storage Settings');
         
