@@ -51,6 +51,14 @@ class CloudStorageManager {
 
     // Save expenses to Firestore
     async saveExpenses(expenses) {
+        console.log('☁️ Attempting to save expenses to cloud:', {
+            expenseCount: expenses.length,
+            hasUser: !!this.currentUser,
+            hasDb: !!this.db,
+            userId: this.currentUser?.uid,
+            isOnline: this.isOnline
+        });
+
         if (!this.currentUser || !this.db) {
             console.warn('⚠️ Cannot save to cloud: No user or database connection');
             return false;
@@ -58,7 +66,7 @@ class CloudStorageManager {
 
         try {
             const userDoc = this.getUserDocRef();
-            await userDoc.set({
+            const docData = {
                 expenses: expenses,
                 lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
                 userInfo: {
@@ -66,9 +74,12 @@ class CloudStorageManager {
                     email: this.currentUser.email,
                     photoURL: this.currentUser.photoURL
                 }
-            }, { merge: true });
+            };
 
-            console.log(`☁️ Saved ${expenses.length} expenses to cloud`);
+            console.log('📤 Writing to Firestore document:', this.currentUser.uid, docData);
+            await userDoc.set(docData, { merge: true });
+
+            console.log(`✅ Successfully saved ${expenses.length} expenses to cloud`);
             return true;
         } catch (error) {
             // Handle specific Firebase errors
@@ -290,9 +301,16 @@ class CloudStorageManager {
         }
     }
 
-    // Check if cloud storage is available
+    // Check if cloud storage is available (works offline too due to Firestore offline support)
     isAvailable() {
-        return !!(this.db && this.currentUser && this.isOnline);
+        const available = !!(this.db && this.currentUser);
+        console.log('🔍 Cloud storage availability check:', {
+            hasDb: !!this.db,
+            hasUser: !!this.currentUser,
+            isOnline: this.isOnline,
+            available: available
+        });
+        return available;
     }
 
     // Get connection status

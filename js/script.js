@@ -29,6 +29,12 @@ class ExpenseTracker {
             window.storageManager.setCurrentUser(user);
         }
 
+        // CRITICAL: Update cloud storage with current user for real-time sync
+        if (window.cloudStorage) {
+            window.cloudStorage.setCurrentUser(user);
+            console.log('🔄 Cloud storage user updated:', user?.displayName || 'none');
+        }
+
         if (user && !this.isInitialized) {
             // User is authenticated, initialize the app
             this.initializeApp();
@@ -36,12 +42,39 @@ class ExpenseTracker {
 
             // Check if we should migrate from session to persistent storage
             this.checkForDataMigration(user);
+        } else if (user && this.isInitialized) {
+            // User signed in while app was already initialized
+            this.handleUserSignIn(user);
         } else if (!user && this.isInitialized) {
             // User signed out, but keep app initialized for session mode
             this.handleSignOut();
         } else if (!user && !this.isInitialized) {
             // No user, initialize in session mode
             this.initializeSessionMode();
+        }
+    }
+
+    async handleUserSignIn(user) {
+        // Handle user signing in while app is already running
+        console.log('🔄 User signed in, switching to persistent mode');
+
+        // Switch to persistent mode
+        if (window.storageManager) {
+            window.storageManager.setStorageMode('persistent');
+        }
+
+        // Set up cloud sync listeners for real-time updates
+        this.setupCloudSyncListeners();
+
+        // Reload data from cloud
+        await this.loadUserData();
+        this.updateDisplay();
+        this.renderExpenses();
+        this.drawCharts();
+
+        // Update UI
+        if (window.notificationManager) {
+            window.notificationManager.updateStorageBanner();
         }
     }
 
@@ -110,12 +143,42 @@ class ExpenseTracker {
         this.drawCharts();
         this.setTodayDate();
 
-        // Set up cloud storage user
+        // Set up cloud storage user and real-time sync
         if (window.cloudStorage && this.currentUser) {
             window.cloudStorage.setCurrentUser(this.currentUser);
+            this.setupCloudSyncListeners();
         }
 
         console.log('💰 Expense tracker initialized for user:', this.currentUser?.displayName || 'session user');
+    }
+
+    // Set up real-time cloud sync listeners
+    setupCloudSyncListeners() {
+        if (!window.cloudStorage) return;
+
+        console.log('🔄 Setting up real-time cloud sync listeners');
+
+        // Listen for real-time updates from cloud
+        window.cloudStorage.onDataUpdate((cloudData) => {
+            console.log('📥 Received real-time update from cloud:', cloudData);
+
+            // Update local data with cloud data
+            this.expenses = Array.isArray(cloudData.expenses) ? cloudData.expenses : [];
+            this.budget = typeof cloudData.budget === 'number' ? cloudData.budget : 0;
+
+            // Update UI immediately
+            this.updateDisplay();
+            this.renderExpenses();
+            this.drawCharts();
+
+            // Show notification about sync
+            if (window.notificationManager) {
+                window.notificationManager.showNotification(
+                    window.notificationManager.createNotification('sync-update', 'info', 2000,
+                        '🔄 Data synced from another device')
+                );
+            }
+        });
     }
 
     resetApp() {
@@ -150,6 +213,15 @@ class ExpenseTracker {
     }
 
     async saveUserData() {
+        console.log('💾 Saving user data:', {
+            expenseCount: this.expenses.length,
+            budget: this.budget,
+            storageMode: window.storageManager?.getStorageInfo()?.mode,
+            hasCloudStorage: !!window.cloudStorage,
+            cloudAvailable: window.cloudStorage?.isAvailable(),
+            currentUser: this.currentUser?.displayName
+        });
+
         // Use storage manager for dual storage support
         if (window.storageManager) {
             await window.storageManager.saveData('expenses', this.expenses);
@@ -166,7 +238,7 @@ class ExpenseTracker {
             }
         }
 
-        console.log(`💾 Saved ${this.expenses.length} expenses, budget: $${this.budget}`);
+        console.log(`✅ Saved ${this.expenses.length} expenses, budget: $${this.budget}`);
     }
 
     initializeEventListeners() {
@@ -503,3 +575,58 @@ document.addEventListener('DOMContentLoaded', () => {
 
     console.log('💰 Personal Expense Tracker loaded successfully!');
 });
+
+// Debug functions for testing cross-device sync
+window.debugSync = {
+    // Test adding a sync test expense
+    async addTestExpense() {
+        if (!window.expenseTracker) {
+            console.error('❌ Expense tracker not initialized');
+            return;
+        }
+
+        const testExpense = {
+            id: Date.now(),
+            description: `Sync Test ${new Date().toLocaleTimeString()}`,
+            amount: Math.floor(Math.random() * 100) + 1,
+            category: 'food',
+            date: new Date().toISOString().split('T')[0],
+            timestamp: new Date().toISOString()
+        };
+
+        console.log('🧪 Adding test expense for sync:', testExpense);
+        window.expenseTracker.expenses.push(testExpense);
+        await window.expenseTracker.saveUserData();
+        window.expenseTracker.updateDisplay();
+        window.expenseTracker.renderExpenses();
+
+        return testExpense;
+    },
+
+    // Check current sync status
+    getSyncStatus() {
+        return {
+            currentUser: window.expenseTracker?.currentUser?.displayName,
+            storageMode: window.storageManager?.getStorageInfo()?.mode,
+            cloudAvailable: window.cloudStorage?.isAvailable(),
+            cloudStatus: window.cloudStorage?.getConnectionStatus(),
+            expenseCount: window.expenseTracker?.expenses?.length || 0
+        };
+    },
+
+    // Force reload data from cloud
+    async reloadFromCloud() {
+        if (!window.expenseTracker) {
+            console.error('❌ Expense tracker not initialized');
+            return;
+        }
+
+        console.log('🔄 Force reloading data from cloud...');
+        await window.expenseTracker.loadUserData();
+        window.expenseTracker.updateDisplay();
+        window.expenseTracker.renderExpenses();
+        window.expenseTracker.drawCharts();
+
+        return window.expenseTracker.expenses;
+    }
+};
