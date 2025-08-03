@@ -1,12 +1,81 @@
 class ExpenseTracker {
     constructor() {
-        this.expenses = JSON.parse(localStorage.getItem('expenses')) || [];
-        this.budget = parseFloat(localStorage.getItem('budget')) || 0;
+        this.expenses = [];
+        this.budget = 0;
+        this.currentUser = null;
+        this.isInitialized = false;
+
+        // Wait for authentication before initializing
+        this.waitForAuth();
+    }
+
+    waitForAuth() {
+        if (typeof window.authManager !== 'undefined') {
+            // Set up auth state listener
+            window.authManager.onAuthStateChanged((user) => {
+                this.handleAuthStateChange(user);
+            });
+        } else {
+            // Wait for auth manager to be ready
+            setTimeout(() => this.waitForAuth(), 100);
+        }
+    }
+
+    handleAuthStateChange(user) {
+        this.currentUser = user;
+
+        if (user && !this.isInitialized) {
+            // User is authenticated, initialize the app
+            this.initializeApp();
+            this.isInitialized = true;
+        } else if (!user) {
+            // User signed out, reset the app
+            this.resetApp();
+            this.isInitialized = false;
+        }
+    }
+
+    initializeApp() {
+        // Load user-specific data
+        this.loadUserData();
         this.initializeEventListeners();
         this.updateDisplay();
         this.renderExpenses();
         this.drawCharts();
         this.setTodayDate();
+
+        console.log('Expense tracker initialized for user:', this.currentUser.displayName);
+    }
+
+    resetApp() {
+        // Clear data when user signs out
+        this.expenses = [];
+        this.budget = 0;
+        this.updateDisplay();
+        this.renderExpenses();
+        this.drawCharts();
+
+        console.log('Expense tracker reset');
+    }
+
+    loadUserData() {
+        if (!this.currentUser) return;
+
+        const userId = this.currentUser.uid;
+
+        // Load user-specific data from localStorage
+        this.expenses = JSON.parse(localStorage.getItem(`expenses_${userId}`)) || [];
+        this.budget = parseFloat(localStorage.getItem(`budget_${userId}`)) || 0;
+    }
+
+    saveUserData() {
+        if (!this.currentUser) return;
+
+        const userId = this.currentUser.uid;
+
+        // Save user-specific data to localStorage
+        localStorage.setItem(`expenses_${userId}`, JSON.stringify(this.expenses));
+        localStorage.setItem(`budget_${userId}`, this.budget.toString());
     }
 
     initializeEventListeners() {
@@ -49,7 +118,7 @@ class ExpenseTracker {
         };
 
         this.expenses.unshift(expense);
-        this.saveToLocalStorage();
+        this.saveUserData(); // Changed from saveToLocalStorage
         this.updateDisplay();
         this.renderExpenses();
         this.drawCharts();
@@ -64,7 +133,7 @@ class ExpenseTracker {
         const budgetAmount = parseFloat(document.getElementById('budgetAmount').value);
         if (budgetAmount && budgetAmount > 0) {
             this.budget = budgetAmount;
-            localStorage.setItem('budget', this.budget.toString());
+            this.saveUserData(); // Changed from localStorage.setItem
             this.updateDisplay();
             this.checkBudgetAlerts();
             document.getElementById('budgetAmount').value = '';
@@ -73,7 +142,7 @@ class ExpenseTracker {
 
     deleteExpense(id) {
         this.expenses = this.expenses.filter(expense => expense.id !== id);
-        this.saveToLocalStorage();
+        this.saveUserData(); // Changed from saveToLocalStorage
         this.updateDisplay();
         this.renderExpenses();
         this.drawCharts();
@@ -327,8 +396,9 @@ class ExpenseTracker {
         ctx.fillText('Daily Expenses (Last 7 Days)', canvas.width / 2, 20);
     }
 
+    // Legacy method - now handled by saveUserData()
     saveToLocalStorage() {
-        localStorage.setItem('expenses', JSON.stringify(this.expenses));
+        this.saveUserData();
     }
 }
 
@@ -336,4 +406,9 @@ class ExpenseTracker {
 let expenseTracker;
 document.addEventListener('DOMContentLoaded', () => {
     expenseTracker = new ExpenseTracker();
+
+    // Make it globally accessible for delete buttons and debugging
+    window.expenseTracker = expenseTracker;
+
+    console.log('💰 Personal Expense Tracker loaded successfully!');
 });

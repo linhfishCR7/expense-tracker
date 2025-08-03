@@ -1,0 +1,26 @@
+# GitHub Pages Jekyll configuration
+title: Personal Expense Tracker
+description: A comprehensive personal finance app to track your daily expenses, manage budgets, and visualize spending patterns.
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+
+# Exclude files from processing
+exclude:
+  - README.md
+  - node_modules/
+  - .git/
+  - .github/
+
+# Include files that start with underscore
+include:
+  - _headers
+
+# Plugin settings
+plugins:
+  - jekyll-sitemap
+  - jekyll-feed
+
+# GitHub Pages specific settings
+github: [metadata]
